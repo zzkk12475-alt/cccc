@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PLC 段码器与 8 通道数字输出仿真系统</title>
+  <style>
+    :root {
+      --bg-darkest: #0e1117;
+      --bg-dark: #151922;
+      --panel-bg: #1c222e;
+      --panel-inner: #131720;
+      --panel-border: #2e3848;
+      --panel-border-bright: #3f4e66;
+      --accent-blue: #0ea5e9;
+      --accent-cyan: #06b6d4;
+      --accent-amber: #f59e0b;
+      --accent-purple: #8b5cf6;
+      --text-bright: #f8fafc;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #475569;
+
+      /* Industrial LED Glow & Colors */
+      --led-green-on: #00ff73;
+      --led-green-glow: 0 0 12px rgba(0, 255, 115, 0.9), 0 0 24px rgba(0, 255, 115, 0.45);
+      --led-green-off: #082914;
+      --led-green-off-border: #0e4020;
+
+      --seg-red-on: #ff2b3d;
+      --seg-red-glow: drop-shadow(0 0 10px rgba(255, 43, 61, 0.95)) drop-shadow(0 0 24px rgba(255, 43, 61, 0.5));
+      --seg-red-off: #28090d;
+
+      --power-green: #10b981;
+      --run-cyan: #38bdf8;
+      --stop-amber: #f59e0b;
+      --wire-active: #00ff73;
+      --wire-inactive: #2a3444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-darkest);
+      background-image: 
+        radial-gradient(ellipse at 50% 0%, #1e2838 0%, transparent 65%),
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 100% 100%, 28px 28px, 28px 28px;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 10px 40px 10px;
+      overflow-x: hidden;
+    }
+
+    .cabinet-header {
+      width: 100%;
+      max-width: 1240px;
+      background: linear-gradient(180deg, #252e3e 0%, #171d27 100%);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      position: relative;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .plc-badge {
+      background: #090e16;
+      border: 1px solid #364459;
+      color: var(--accent-cyan);
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 2px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1.1;
+    }
+
+    .plc-badge small {
+      font-size: 9px;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+    }
+
+    .title-box h1 {
+      font-size: 18px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-box p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      font-family: monospace;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .status-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #0d1219;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #232c3a;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .indicator-pip {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #252e3d;
+      transition: all 0.2s ease;
+    }
+
+    .indicator-pip.pwr {
+      background: var(--power-green);
+      box-shadow: 0 0 8px var(--power-green);
+    }
+
+    .indicator-pip.run {
+      background: var(--run-cyan);
+      box-shadow: 0 0 8px var(--run-cyan);
+      animation: pulse-soft 2s infinite ease-in-out;
+    }
+
+    .indicator-pip.stop {
+      background: var(--stop-amber);
+      box-shadow: 0 0 8px var(--stop-amber);
+    }
+
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .icon-btn {
+      background: #1e2634;
+      border: 1px solid #354256;
+      color: #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .icon-btn:hover {
+      background: #283344;
+      border-color: #4b5d78;
+      color: #fff;
+    }
+
+    .icon-btn.active {
+      background: rgba(14, 165, 233, 0.2);
+      border-color: var(--accent-blue);
+      color: var(--accent-cyan);
+    }
+
+    /* System Navigation Tabs */
+    .view-tabs {
+      width: 100%;
+      max-width: 1240px;
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid #242c3c;
+      padding-bottom: 4px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      color: #94a3b8;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      background: #1c222e;
+      border-color: var(--panel-border);
+      border-bottom: 2px solid var(--accent-cyan);
+      box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Tab Containers */
+    .tab-view {
+      display: none;
+      width: 100%;
+      max-width: 1240px;
+    }
+
+    .tab-view.active {
+      display: block;
+    }
+
+    .workbench-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 992px) {
+      .workbench-grid {
+        grid-template-columns: 1.15fr 0.85fr;
+      }
+    }
+
+    .card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      position: relative;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chip-badge {
+      font-size: 11px;
+      background: rgba(14, 165, 233, 0.15);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      color: #38bdf8;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+
+    .plc-rack {
+      background: #131720;
+      border: 1px solid #2b3545;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+      box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.7);
+    }
+
+    .din-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: #0c0f16;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #718096;
+      border: 1px dashed #263244;
+    }
+
+    .channel-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .channel-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #181f2c;
+      border: 1px solid #273344;
+      border-radius: 8px;
+      padding: 10px 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .channel-cell:hover {
+      border-color: #4a5c78;
+      transform: translateY(-2px);
+    }
+
+    .channel-cell.active {
+      background: #0d2317;
+      border-color: rgba(0, 255, 115, 0.6);
+      box-shadow: 0 0 12px rgba(0, 255, 115, 0.25);
+    }
+
+    .channel-addr {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 800;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .channel-seg {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+
+    /* Industrial Round LED bulb */
+    .lamp-bezel {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #333f52, #0d1219);
+      padding: 3px;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 3px 5px rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lamp-core {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--led-green-off);
+      border: 1px solid var(--led-green-off-border);
+      position: relative;
+      transition: all 0.12s ease;
+    }
+
+    .lamp-core::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 4px;
+      width: 6px;
+      height: 4px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      pointer-events: none;
+    }
+
+    .channel-cell.active .lamp-core {
+      background: var(--led-green-on);
+      border-color: #86efac;
+      box-shadow: var(--led-green-glow);
+    }
+
+    .channel-level {
+      margin-top: 8px;
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-dim);
+    }
+
+    .channel-cell.active .channel-level {
+      color: var(--led-green-on);
+    }
+
+    .terminals-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 6px;
+      padding-top: 8px;
+      border-top: 1px dashed #243042;
+    }
+
+    .terminal-bolt {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .screw-disk {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #7d8b9e, #2b3543);
+      border: 1px solid #141a24;
+      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.4);
+      position: relative;
+    }
+
+    .screw-disk::before {
+      content: '';
+      position: absolute;
+      width: 8px;
+      height: 1.5px;
+      background: #141922;
+      top: 5px;
+      left: 2px;
+      transform: rotate(45deg);
+    }
+
+    .screw-caption {
+      font-size: 9px;
+      color: #64748b;
+      font-family: monospace;
+    }
+
+    .display-enclosure {
+      background: #080b10;
+      border: 2px solid #273142;
+      border-radius: 12px;
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: inset 0 8px 24px rgba(0, 0, 0, 0.95);
+      min-height: 270px;
+    }
+
+    .bezel-label-left {
+      position: absolute;
+      top: 10px;
+      left: 14px;
+      font-size: 10px;
+      color: #526075;
+      font-family: monospace;
+      letter-spacing: 1px;
+    }
+
+    .bezel-label-right {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      font-size: 10px;
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: monospace;
+    }
+
+    .svg-stage {
+      width: 170px;
+      height: 230px;
+      filter: drop-shadow(0 0 16px rgba(0, 0, 0, 0.9));
+    }
+
+    .seg-poly {
+      fill: var(--seg-red-off);
+      transition: fill 0.08s ease, filter 0.08s ease;
+      cursor: pointer;
+    }
+
+    .seg-poly:hover {
+      fill: #4d1016;
+    }
+
+    .seg-poly.on {
+      fill: var(--seg-red-on);
+      filter: var(--seg-red-glow);
+    }
+
+    .seg-tags-cluster {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .seg-pill {
+      font-size: 11px;
+      font-family: monospace;
+      color: #94a3b8;
+      background: #10151f;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid #252e3c;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .seg-pill:hover {
+      border-color: #3b82f6;
+    }
+
+    .seg-pill.active {
+      border-color: #f87171;
+      background: rgba(248, 113, 113, 0.15);
+      color: #fca5a5;
+    }
+
+    .seg-pill span {
+      font-weight: 800;
+      color: #ef4444;
+    }
+
+    .keypad-matrix {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .btn-key {
+      background: linear-gradient(180deg, #2b3546 0%, #1c2430 100%);
+      border: 1px solid #3c4a5f;
+      border-radius: 8px;
+      color: #f8fafc;
+      font-family: monospace;
+      font-size: 22px;
+      font-weight: 900;
+      padding: 12px 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      transition: all 0.08s ease;
+      outline: none;
+    }
+
+    .btn-key:hover {
+      background: linear-gradient(180deg, #374458 0%, #222b39 100%);
+      border-color: #586b87;
+      transform: translateY(-1px);
+    }
+
+    .btn-key:active, .btn-key.pressed {
+      transform: translateY(2px);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8), inset 0 2px 4px rgba(0, 0, 0, 0.9);
+      background: #141a24;
+      border-color: var(--accent-cyan);
+    }
+
+    .btn-key.current {
+      border-color: var(--led-green-on);
+      box-shadow: 0 0 14px rgba(0, 255, 115, 0.4), inset 0 0 8px rgba(0, 255, 115, 0.2);
+      color: var(--led-green-on);
+    }
+
+    .btn-key-hex {
+      font-size: 9px;
+      color: #718096;
+      margin-top: 2px;
+      font-weight: 600;
+    }
+
+    .btn-key.current .btn-key-hex {
+      color: #86efac;
+    }
+
+    /* Tool & Quick action rows */
+    .controls-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .tool-btn {
+      background: #202735;
+      border: 1px solid #364254;
+      color: #e2e8f0;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .tool-btn:hover {
+      background: #2a3445;
+      border-color: #4d5e78;
+    }
+
+    .tool-btn.active {
+      background: rgba(14, 165, 233, 0.22);
+      border-color: var(--accent-blue);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 8px rgba(14, 165, 233, 0.3);
+    }
+
+    .tool-btn.amber.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--accent-amber);
+      color: #fbbf24;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+    }
+
+    /* Manual Input Row */
+    .input-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .field-wrap {
+      flex: 1;
+      display: flex;
+      background: #11151e;
+      border: 1px solid #2c3748;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .field-tag {
+      font-size: 11px;
+      color: #94a3b8;
+      background: #1a202c;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      border-right: 1px solid #2c3748;
+      white-space: nowrap;
+    }
+
+    .field-input {
+      background: transparent;
+      border: none;
+      color: var(--accent-cyan);
+      font-family: monospace;
+      font-size: 15px;
+      font-weight: 800;
+      padding: 8px 12px;
+      width: 100%;
+      outline: none;
+    }
+
+    .telemetry-board {
+      background: #11151f;
+      border: 1px solid #263142;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stat-chip {
+      background: #090d14;
+      border: 1px solid #1e2636;
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
+    .stat-name {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .stat-val {
+      font-family: monospace;
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--accent-cyan);
+    }
+
+    .stat-val.hex {
+      color: var(--accent-amber);
+    }
+
+    .stat-val.dec {
+      color: #a78bfa;
+    }
+
+    /* Bit register matrix */
+    .register-box {
+      background: #090c13;
+      border: 1px solid #1c2332;
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .reg-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #64748b;
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+
+    .bits-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
+      text-align: center;
+    }
+
+    .bit-slot {
+      background: #131722;
+      border: 1px solid #242c3c;
+      border-radius: 5px;
+      padding: 6px 2px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .bit-slot:hover {
+      border-color: #3b82f6;
+    }
+
+    .bit-slot.active {
+      background: #0b2416;
+      border-color: var(--led-green-on);
+      box-shadow: 0 0 8px rgba(0, 255, 115, 0.3);
+    }
+
+    .bit-header {
+      font-size: 9px;
+      color: #64748b;
+      font-family: monospace;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .bit-num {
+      font-family: monospace;
+      font-size: 15px;
+      font-weight: 900;
+      color: #475569;
+    }
+
+    .bit-slot.active .bit-num {
+      color: var(--led-green-on);
+    }
+
+    .ladder-card {
+      background: #11151f;
+      border: 1px solid #283344;
+      border-radius: 10px;
+      padding: 18px;
+    }
+
+    .rung-container {
+      background: #0b0e14;
+      border: 1px solid #202838;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      position: relative;
+      overflow-x: auto;
+    }
+
+    .rung-title {
+      font-size: 12px;
+      color: var(--accent-cyan);
+      font-family: monospace;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ladder-svg {
+      width: 100%;
+      min-width: 600px;
+      height: 180px;
+    }
+
+    .wire-rail {
+      stroke: #3b82f6;
+      stroke-width: 4;
+    }
+
+    .wire-power {
+      stroke: #2a3444;
+      stroke-width: 2.5;
+      transition: stroke 0.2s ease;
+    }
+
+    .wire-power.live {
+      stroke: #00ff73;
+      filter: drop-shadow(0 0 6px #00ff73);
+    }
+
+    .ladder-box {
+      fill: #19202c;
+      stroke: #3c4b62;
+      stroke-width: 2;
+    }
+
+    .ladder-box.live {
+      stroke: var(--accent-cyan);
+      filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.4));
+    }
+
+    .table-container {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid #252e3e;
+      background: #0e121a;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: monospace;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    thead {
+      background: #161c26;
+      color: #94a3b8;
+    }
+
+    th {
+      padding: 10px 8px;
+      font-weight: 800;
+      border-bottom: 1px solid #2a3546;
+      white-space: nowrap;
+    }
+
+    th.th-accent {
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    td {
+      padding: 8px 6px;
+      border-bottom: 1px solid #1b2230;
+      color: #cbd5e1;
+      white-space: nowrap;
+      transition: background 0.1s ease;
+    }
+
+    tbody tr {
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background: #1f2736;
+    }
+
+    tbody tr.active-row {
+      background: rgba(0, 255, 115, 0.13) !important;
+      outline: 1px solid rgba(0, 255, 115, 0.5);
+    }
+
+    tbody tr.active-row td {
+      color: #ffffff;
+      font-weight: 800;
+    }
+
+    .bit-1 {
+      color: var(--led-green-on);
+      font-weight: 800;
+    }
+
+    .bit-0 {
+      color: #475569;
+    }
+
+    .schematic-box {
+      background: #090c13;
+      border: 1px solid #20293a;
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    .schematic-svg {
+      min-width: 680px;
+      width: 100%;
+      height: 380px;
+    }
+
+    .footer-bar {
+      width: 100%;
+      max-width: 1240px;
+      margin-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 11px;
+      color: #64748b;
+      padding: 0 4px;
+    }
+
+    .badge-kbd {
+      background: #1e2634;
+      border: 1px solid #334055;
+      color: #cbd5e1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    /* Toast Notification */
+    .toast-popup {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      border: 1px solid var(--accent-blue);
+      color: #f8fafc;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 999;
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+      transition: all 0.25s ease;
+    }
+
+    .toast-popup.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="cabinet-header">
+    <div class="brand-section">
+      <div class="plc-badge">
+        <span>S7-SIM</span>
+        <small>CPU 224XP</small>
+      </div>
+      <div class="title-box">
+        <h1>PLC 段码器与 8 通道数字输出仿真系统</h1>
+        <p>SEGMENT DECODER INSTRUCTION (SEG) & 8-CHANNEL DO CONTROLLER WORKBENCH</p>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="status-cluster">
+        <div class="status-item">
+          <div class="indicator-pip pwr"></div>
+          <span>24V DC</span>
+        </div>
+        <div class="status-item">
+          <div class="indicator-pip run" id="plcStatePip"></div>
+          <span id="plcStateLabel">RUN</span>
+        </div>
+        <div class="status-item">
+          <span style="color:#64748b">SCAN:</span>
+          <span style="color:var(--accent-cyan); font-family:monospace;" id="scanSpeedVal">1.1ms</span>
+        </div>
+      </div>
+
+      <button class="icon-btn active" id="btnAudioToggle" title="切换电磁继电器动作音效 (M)">
+        <span id="audioIcon">🔊</span> <span id="audioLabel">音效开</span>
+      </button>
+
+      <button class="icon-btn" id="btnPlcRunStop" title="切换 PLC 运行 / 停止状态">
+        <span id="runStopIcon">⏸</span> <span id="runStopLabel">运行中</span>
+      </button>
+    </div>
+  </header>
+
+  <nav class="view-tabs">
+    <button class="tab-btn active" data-tab="tab-console">
+      <span>🖥️</span> 主监控台 (Console)
+    </button>
+    <button class="tab-btn" data-tab="tab-ladder">
+      <span>⚡</span> PLC 梯形图 (Ladder Logic)
+    </button>
+    <button class="tab-btn" data-tab="tab-table">
+      <span>📋</span> 编码真值表 (Truth Table)
+    </button>
+    <button class="tab-btn" data-tab="tab-schematic">
+      <span>📐</span> 电气原理图 (Schematic)
+    </button>
+  </nav>
+
+  <section class="tab-view active" id="tab-console">
+    <div class="workbench-grid">
+      <!-- Left Column: PLC Hardware Output Module & SVG 7-Segment -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>⚡</span> 硬件输出端子 & 7段数码管 (DO: Q0.0 ~ Q0.7)
+          </div>
+          <div class="chip-badge">共阴极驱动 (HIGH = ON)</div>
+        </div>
+
+        <!-- PLC DO Module -->
+        <div class="plc-rack">
+          <div class="din-bar">
+            <span>DIGITAL OUTPUT: 8 x DC 24V (TRANSISTOR)</span>
+            <span>BYTE: QB0 [Q0.7(dp) ~ Q0.0(a)]</span>
+          </div>
+
+          <!-- 8 Output Channels -->
+          <div class="channel-row" id="channelRow">
+            <!-- Rendered dynamically by JavaScript -->
+          </div>
+
+          <!-- Screw Terminal row -->
+          <div class="terminals-row" id="terminalsRow">
+            <!-- Decorative and informative screw terminals -->
+          </div>
+        </div>
+
+        <!-- Realistic 7-Segment SVG Enclosure -->
+        <div class="display-enclosure">
+          <div class="bezel-label-left">SM-200 RED DISPLAY MODULE</div>
+          <div class="bezel-label-right">共阴极 COMMON CATHODE</div>
+
+          <!-- SVG 7-Segment Digit -->
+          <svg class="svg-stage" viewBox="0 0 130 190">
+            <g transform="skewX(-4) translate(8, 5)">
+              <!-- Segment a (Q0.0) -->
+              <polygon id="seg-a" class="seg-poly" points="24,14 32,6 80,6 88,14 78,24 34,24" />
+              <!-- Segment b (Q0.1) -->
+              <polygon id="seg-b" class="seg-poly" points="90,16 98,24 94,80 86,88 78,80 82,24" />
+              <!-- Segment c (Q0.2) -->
+              <polygon id="seg-c" class="seg-poly" points="86,96 94,104 88,160 80,168 72,160 78,104" />
+              <!-- Segment d (Q0.3) -->
+              <polygon id="seg-d" class="seg-poly" points="18,170 26,160 70,160 78,170 70,180 26,180" />
+              <!-- Segment e (Q0.4) -->
+              <polygon id="seg-e" class="seg-poly" points="14,96 22,104 16,160 8,168 2,160 8,104" />
+              <!-- Segment f (Q0.5) -->
+              <polygon id="seg-f" class="seg-poly" points="20,16 28,24 22,80 14,88 6,80 12,24" />
+              <!-- Segment g (Q0.6) -->
+              <polygon id="seg-g" class="seg-poly" points="22,92 30,84 72,84 80,92 72,100 30,100" />
+              <!-- Segment dp (Q0.7) -->
+              <circle id="seg-dp" class="seg-poly" cx="102" cy="172" r="7.5" />
+            </g>
+          </svg>
+
+          <!-- Interactive Segment Pills (Clickable) -->
+          <div class="seg-tags-cluster">
+            <div class="seg-pill" data-seg="a">Q0.0 <span>a</span></div>
+            <div class="seg-pill" data-seg="b">Q0.1 <span>b</span></div>
+            <div class="seg-pill" data-seg="c">Q0.2 <span>c</span></div>
+            <div class="seg-pill" data-seg="d">Q0.3 <span>d</span></div>
+            <div class="seg-pill" data-seg="e">Q0.4 <span>e</span></div>
+            <div class="seg-pill" data-seg="f">Q0.5 <span>f</span></div>
+            <div class="seg-pill" data-seg="g">Q0.6 <span>g</span></div>
+            <div class="seg-pill" data-seg="dp">Q0.7 <span>dp</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Operator Console & Telemetry Readouts -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🎮</span> 操作面板与数据寄存器 (Console)
+          </div>
+          <div class="chip-badge">INSTRUCTION: SEG VB10, QB0</div>
+        </div>
+
+        <!-- 0-9 Industrial Tactile Keypad -->
+        <div class="keypad-matrix" id="keypadMatrix">
+          <!-- 0-9 buttons populated by JS -->
+        </div>
+
+        <!-- Quick Function Buttons -->
+        <div class="controls-strip">
+          <button class="tool-btn amber" id="btnToggleDp" title="翻转 Q0.7 小数点">
+            <span>●</span> DP 小数点
+          </button>
+          <button class="tool-btn" id="btnAllOn" title="测试全亮 (0xFF)">
+            <span>🔆</span> 全亮 (0xFF)
+          </button>
+          <button class="tool-btn" id="btnAllOff" title="清空全灭 (0x00)">
+            <span>⭕</span> 全灭 (0x00)
+          </button>
+          <button class="tool-btn" id="btnInvert" title="反转当前所有段码">
+            <span>🔄</span> 取反 (INV)
+          </button>
+        </div>
+
+        <!-- Direct Inputs & Auto Scan Toolbar -->
+        <div class="input-bar">
+          <div class="field-wrap">
+            <div class="field-tag">输入十进制</div>
+            <input type="number" id="directNumInput" class="field-input" min="0" max="9" value="0" placeholder="0-9">
+          </div>
+          <div class="field-wrap">
+            <div class="field-tag">输入十六进制</div>
+            <input type="text" id="directHexInput" class="field-input" value="0x3F" placeholder="0x..">
+          </div>
+        </div>
+
+        <!-- Auto-Scan Controller Row -->
+        <div class="controls-strip" style="margin-bottom: 14px;">
+          <button class="tool-btn" id="btnAutoScanToggle">
+            <span id="scanPlayIcon">▶</span> <span id="scanPlayText">启动自动巡检</span>
+          </button>
+          <select id="scanSpeedSelect" class="tool-btn" style="padding: 8px;">
+            <option value="500">巡检间隔: 500ms</option>
+            <option value="1000" selected>巡检间隔: 1000ms</option>
+            <option value="2000">巡检间隔: 2000ms</option>
+          </select>
+          <button class="tool-btn" id="btnScanDirection">
+            <span id="dirIcon">⬆</span> <span id="dirText">递增巡检</span>
+          </button>
+        </div>
+
+        <!-- Telemetry & Data Registers -->
+        <div class="telemetry-board">
+          <div class="stats-row">
+            <div class="stat-chip">
+              <div class="stat-name">解码字形</div>
+              <div class="stat-val" id="statDecodedDigit">0</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-name">十六进制 (HEX)</div>
+              <div class="stat-val hex" id="statHex">16#3F</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-name">十进制 (DEC)</div>
+              <div class="stat-val dec" id="statDec">63</div>
+            </div>
+            <div class="stat-chip">
+              <div class="stat-name">驱动电压 (DO)</div>
+              <div class="stat-val" style="color:var(--led-green-on);" id="statVoltage">+24.0 V</div>
+            </div>
+          </div>
+
+          <!-- Register bit breakdown -->
+          <div class="register-box">
+            <div class="reg-top">
+              <span>PLC 输出字节 QB0 (MSB: Q0.7 → LSB: Q0.0)</span>
+              <span id="statBinString" style="color:var(--accent-cyan);">2#00111111</span>
+            </div>
+            <div class="bits-grid" id="bitsGrid">
+              <!-- 8 bit slots populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-view" id="tab-ladder">
+    <div class="card ladder-card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>⚡</span> 西门子 S7-200 / SMART 梯形图 (SEG 译码指令监控)
+        </div>
+        <div class="chip-badge">CYCLE TIME: 1.2 ms</div>
+      </div>
+
+      <!-- Network 1: SEG Instruction Rung -->
+      <div class="rung-container">
+        <div class="rung-title">
+          <span>NETWORK 1:</span> 常开触点 SM0.0 (运行标志) 调用 SEG 七段译码指令将源字节转换为段码输出到 QB0
+        </div>
+        <svg class="ladder-svg" viewBox="0 0 780 140">
+          <!-- Power Rails -->
+          <line x1="20" y1="10" x2="20" y2="130" class="wire-rail" />
+          <line x1="760" y1="10" x2="760" y2="130" class="wire-rail" />
+
+          <!-- Main Power Rung Wire -->
+          <line x1="20" y1="70" x2="70" y2="70" class="wire-power live" />
+
+          <!-- Contact SM0.0 (Always ON) -->
+          <line x1="70" y1="55" x2="70" y2="85" class="wire-power live" />
+          <line x1="86" y1="55" x2="86" y2="85" class="wire-power live" />
+          <text x="78" y="46" fill="#00ff73" font-size="11" font-family="monospace" text-anchor="middle">SM0.0</text>
+          <text x="78" y="100" fill="#64748b" font-size="9" font-family="monospace" text-anchor="middle">常开接通</text>
+
+          <line x1="86" y1="70" x2="220" y2="70" class="wire-power live" />
+
+          <!-- SEG Instruction Box -->
+          <rect x="220" y="25" width="160" height="90" rx="4" class="ladder-box live" />
+          <text x="300" y="48" fill="#38bdf8" font-size="15" font-weight="bold" font-family="monospace" text-anchor="middle">SEG</text>
+          <text x="300" y="64" fill="#94a3b8" font-size="10" font-family="monospace" text-anchor="middle">七段译码指令</text>
+
+          <line x1="220" y1="85" x2="245" y2="85" stroke="#3c4b62" stroke-width="1.5" />
+          <text x="250" y="88" fill="#e2e8f0" font-size="11" font-family="monospace">IN</text>
+          <text x="250" y="104" fill="#f59e0b" font-size="11" font-family="monospace" id="ladderInputVar">VB10 (0)</text>
+
+          <line x1="380" y1="85" x2="355" y2="85" stroke="#3c4b62" stroke-width="1.5" />
+          <text x="350" y="88" fill="#e2e8f0" font-size="11" font-family="monospace" text-anchor="end">OUT</text>
+          <text x="350" y="104" fill="#00ff73" font-size="11" font-family="monospace" text-anchor="end" id="ladderOutputVar">QB0 (0x3F)</text>
+
+          <!-- Line from SEG to coil -->
+          <line x1="380" y1="70" x2="520" y2="70" class="wire-power live" />
+
+          <!-- Output Coil representation -->
+          <path d="M 520,70 A 15,15 0 0,0 535,55" fill="none" class="wire-power live" />
+          <path d="M 520,70 A 15,15 0 0,1 535,85" fill="none" class="wire-power live" />
+          <path d="M 550,55 A 15,15 0 0,1 565,70" fill="none" class="wire-power live" />
+          <path d="M 550,85 A 15,15 0 0,0 565,70" fill="none" class="wire-power live" />
+          <text x="542" y="74" fill="#00ff73" font-size="11" font-weight="bold" font-family="monospace" text-anchor="middle">QB0</text>
+          <text x="542" y="44" fill="#94a3b8" font-size="10" font-family="monospace" text-anchor="middle">输出字节</text>
+
+          <line x1="565" y1="70" x2="760" y2="70" class="wire-power live" />
+        </svg>
+      </div>
+
+      <!-- Network 2: 8 Parallel DO Bits status monitor -->
+      <div class="rung-container">
+        <div class="rung-title">
+          <span>NETWORK 2:</span> 物理输出通道 Q0.0 ~ Q0.7 实时得电状态监视
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;" id="ladderBitCards">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-view" id="tab-table">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📋</span> PLC 七段数码管标准共阴编码真值表 (Truth Table)
+        </div>
+        <div class="chip-badge">点击任意行直接切换字形</div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>字形</th>
+              <th class="th-accent">Q0.7 (dp)</th>
+              <th>Q0.6 (g)</th>
+              <th>Q0.5 (f)</th>
+              <th>Q0.4 (e)</th>
+              <th>Q0.3 (d)</th>
+              <th>Q0.2 (c)</th>
+              <th>Q0.1 (b)</th>
+              <th>Q0.0 (a)</th>
+              <th class="th-accent">十六进制 (HEX)</th>
+              <th class="th-accent">十进制 (DEC)</th>
+              <th>点亮发光段</th>
+            </tr>
+          </thead>
+          <tbody id="truthTableBody">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-view" id="tab-schematic">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📐</span> PLC 与数码管硬件接线原理图 (Wiring Schematic)
+        </div>
+        <div class="chip-badge">24V DC NPN/PNP 共阴端子接线</div>
+      </div>
+
+      <div class="schematic-box">
+        <svg class="schematic-svg" viewBox="0 0 740 380">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#00ff73"/>
+            </marker>
+          </defs>
+
+          <!-- PLC Module Left -->
+          <rect x="40" y="30" width="160" height="320" rx="6" fill="#141a24" stroke="#2e3a4e" stroke-width="2" />
+          <rect x="40" y="30" width="160" height="34" rx="4" fill="#1e2634" />
+          <text x="120" y="52" fill="#38bdf8" font-size="12" font-weight="bold" font-family="monospace" text-anchor="middle">PLC OUTPUT (DO)</text>
+
+          <!-- PLC 24V & 1M terminals -->
+          <circle cx="180" cy="80" r="5" fill="#f59e0b" />
+          <text x="170" y="84" fill="#cbd5e1" font-size="10" font-family="monospace" text-anchor="end">1L+ (+24V)</text>
+          <circle cx="180" cy="104" r="5" fill="#3b82f6" />
+          <text x="170" y="108" fill="#cbd5e1" font-size="10" font-family="monospace" text-anchor="end">1M (0V)</text>
+
+          <!-- 8 Output terminals on PLC -->
+          <g id="schematicPlcTerminals">
+            <!-- Rendered by JS -->
+          </g>
+
+          <!-- 7-Segment Display Module Right -->
+          <rect x="520" y="30" width="180" height="320" rx="6" fill="#0a0e16" stroke="#2e3a4e" stroke-width="2" />
+          <rect x="520" y="30" width="180" height="34" rx="4" fill="#18202d" />
+          <text x="610" y="52" fill="#ef4444" font-size="12" font-weight="bold" font-family="monospace" text-anchor="middle">COMMON CATHODE</text>
+
+          <!-- Pins on 7-Segment Display -->
+          <g id="schematicDisplayPins">
+            <!-- Rendered by JS -->
+          </g>
+
+          <!-- Cathode GND connection -->
+          <line x1="610" y1="320" x2="610" y2="355" stroke="#3b82f6" stroke-width="2" />
+          <line x1="590" y1="355" x2="630" y2="355" stroke="#3b82f6" stroke-width="2" />
+          <line x1="596" y1="360" x2="624" y2="360" stroke="#3b82f6" stroke-width="2" />
+          <line x1="604" y1="365" x2="616" y2="365" stroke="#3b82f6" stroke-width="2" />
+          <text x="610" y="378" fill="#64748b" font-size="10" font-family="monospace" text-anchor="middle">GND (共阴极接地)</text>
+
+          <!-- Connecting Wire Lines between PLC and Display -->
+          <g id="schematicWires">
+            <!-- Rendered by JS -->
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer-bar">
+    <div>
+      <span>操作提示：键盘按键 <span class="badge-kbd">0</span>~<span class="badge-kbd">9</span> 快速切号 | 空格 <span class="badge-kbd">Space</span> 切换DP | <span class="badge-kbd">A</span> 巡检 | <span class="badge-kbd">M</span> 静音</span>
+    </div>
+    <div>
+      <span>SIMATIC S7 DO EMULATOR • 纯原生离线运行环境</span>
+    </div>
+  </footer>
+
+  <!-- Toast Notification element -->
+  <div class="toast-popup" id="toastBox">
+    <span id="toastIcon">ℹ️</span>
+    <span id="toastMsg">通知信息</span>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* Hardware Channel Definitions:
+         Bit 0 -> Q0.0 -> a
+         Bit 1 -> Q0.1 -> b
+         Bit 2 -> Q0.2 -> c
+         Bit 3 -> Q0.3 -> d
+         Bit 4 -> Q0.4 -> e
+         Bit 5 -> Q0.5 -> f
+         Bit 6 -> Q0.6 -> g
+         Bit 7 -> Q0.7 -> dp
+      */
+      const CHANNELS = [
+        { bit: 0, plc: 'Q0.0', seg: 'a', name: '顶段' },
+        { bit: 1, plc: 'Q0.1', seg: 'b', name: '右上段' },
+        { bit: 2, plc: 'Q0.2', seg: 'c', name: '右下段' },
+        { bit: 3, plc: 'Q0.3', seg: 'd', name: '底段' },
+        { bit: 4, plc: 'Q0.4', seg: 'e', name: '左下段' },
+        { bit: 5, plc: 'Q0.5', seg: 'f', name: '左上段' },
+        { bit: 6, plc: 'Q0.6', seg: 'g', name: '中段' },
+        { bit: 7, plc: 'Q0.7', seg: 'dp', name: '小数点' }
+      ];
+
+      // Standard Common-Cathode Segment Table
+      const DIGIT_CODES = {
+        0: { code: 0x3F, activeSegs: ['a', 'b', 'c', 'd', 'e', 'f'] },
+        1: { code: 0x06, activeSegs: ['b', 'c'] },
+        2: { code: 0x5B, activeSegs: ['a', 'b', 'd', 'e', 'g'] },
+        3: { code: 0x4F, activeSegs: ['a', 'b', 'c', 'd', 'g'] },
+        4: { code: 0x66, activeSegs: ['b', 'c', 'f', 'g'] },
+        5: { code: 0x6D, activeSegs: ['a', 'c', 'd', 'f', 'g'] },
+        6: { code: 0x7D, activeSegs: ['a', 'c', 'd', 'e', 'f', 'g'] },
+        7: { code: 0x07, activeSegs: ['a', 'b', 'c'] },
+        8: { code: 0x7F, activeSegs: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] },
+        9: { code: 0x6F, activeSegs: ['a', 'b', 'c', 'd', 'f', 'g'] }
+      };
+
+      // Application State
+      let currentByte = 0x3F; // Default digit 0
+      let currentDigit = 0;   // 0~9, or null if custom combination
+      let isPlcRunning = true;
+      let soundEnabled = true;
+      let autoScanTimer = null;
+      let autoScanDirection = 1; // 1 for increment, -1 for decrement
+
+      // DOM Elements
+      const channelRowEl = document.getElementById('channelRow');
+      const terminalsRowEl = document.getElementById('terminalsRow');
+      const keypadMatrixEl = document.getElementById('keypadMatrix');
+      const bitsGridEl = document.getElementById('bitsGrid');
+      const truthTableBodyEl = document.getElementById('truthTableBody');
+
+      const directNumInputEl = document.getElementById('directNumInput');
+      const directHexInputEl = document.getElementById('directHexInput');
+      const btnToggleDpEl = document.getElementById('btnToggleDp');
+      const btnAllOnEl = document.getElementById('btnAllOn');
+      const btnAllOffEl = document.getElementById('btnAllOff');
+      const btnInvertEl = document.getElementById('btnInvert');
+
+      const btnAutoScanToggleEl = document.getElementById('btnAutoScanToggle');
+      const scanPlayIconEl = document.getElementById('scanPlayIcon');
+      const scanPlayTextEl = document.getElementById('scanPlayText');
+      const scanSpeedSelectEl = document.getElementById('scanSpeedSelect');
+      const btnScanDirectionEl = document.getElementById('btnScanDirection');
+      const dirIconEl = document.getElementById('dirIcon');
+      const dirTextEl = document.getElementById('dirText');
+
+      const statDecodedDigitEl = document.getElementById('statDecodedDigit');
+      const statHexEl = document.getElementById('statHex');
+      const statDecEl = document.getElementById('statDec');
+      const statBinStringEl = document.getElementById('statBinString');
+      const scanSpeedValEl = document.getElementById('scanSpeedVal');
+
+      const ladderInputVarEl = document.getElementById('ladderInputVar');
+      const ladderOutputVarEl = document.getElementById('ladderOutputVar');
+      const ladderBitCardsEl = document.getElementById('ladderBitCards');
+
+      const btnAudioToggleEl = document.getElementById('btnAudioToggle');
+      const audioIconEl = document.getElementById('audioIcon');
+      const audioLabelEl = document.getElementById('audioLabel');
+
+      const btnPlcRunStopEl = document.getElementById('btnPlcRunStop');
+      const runStopIconEl = document.getElementById('runStopIcon');
+      const runStopLabelEl = document.getElementById('runStopLabel');
+      const plcStatePipEl = document.getElementById('plcStatePip');
+      const plcStateLabelEl = document.getElementById('plcStateLabel');
+
+      const toastBoxEl = document.getElementById('toastBox');
+      const toastMsgEl = document.getElementById('toastMsg');
+      let toastTimer = null;
+
+      let audioCtx = null;
+      function playRelaySound() {
+        if (!soundEnabled) return;
+        try {
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+          const t = audioCtx.currentTime;
+
+          // Oscillator 1: High crisp snap
+          const osc1 = audioCtx.createOscillator();
+          const gain1 = audioCtx.createGain();
+          osc1.type = 'triangle';
+          osc1.frequency.setValueAtTime(1400, t);
+          osc1.frequency.exponentialRampToValueAtTime(120, t + 0.035);
+
+          gain1.gain.setValueAtTime(0.2, t);
+          gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+
+          osc1.connect(gain1);
+          gain1.connect(audioCtx.destination);
+
+          // Oscillator 2: Metallic armature thud
+          const osc2 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(260, t + 0.004);
+          osc2.frequency.exponentialRampToValueAtTime(40, t + 0.05);
+
+          gain2.gain.setValueAtTime(0.18, t + 0.004);
+          gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+
+          osc1.start(t);
+          osc1.stop(t + 0.04);
+          osc2.start(t + 0.004);
+          osc2.stop(t + 0.055);
+        } catch (e) {
+          // Audio not permitted or unsupported, fails gracefully
+        }
+      }
+
+      function showToast(msg) {
+        toastMsgEl.textContent = msg;
+        toastBoxEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toastBoxEl.classList.remove('show');
+        }, 1800);
+      }
+
+      function initLayouts() {
+        // 1. Build PLC Channel lamps (Q0.0 ~ Q0.7)
+        channelRowEl.innerHTML = '';
+        terminalsRowEl.innerHTML = '';
+        CHANNELS.forEach(ch => {
+          const col = document.createElement('div');
+          col.className = 'channel-cell';
+          col.id = `ch-cell-${ch.seg}`;
+          col.title = `点击翻转 ${ch.plc} (${ch.seg})`;
+          col.innerHTML = `
+            <span class="channel-addr">${ch.plc}</span>
+            <span class="channel-seg">${ch.seg}</span>
+            <div class="lamp-bezel">
+              <div class="lamp-core" id="lamp-${ch.seg}"></div>
+            </div>
+            <span class="channel-level" id="level-${ch.seg}">0</span>
+          `;
+          col.addEventListener('click', () => {
+            toggleBit(ch.bit);
+          });
+          channelRowEl.appendChild(col);
+
+          const term = document.createElement('div');
+          term.className = 'terminal-bolt';
+          term.innerHTML = `
+            <div class="screw-disk"></div>
+            <span class="screw-caption">${ch.seg}</span>
+          `;
+          terminalsRowEl.appendChild(term);
+        });
+
+        // 2. Build 0-9 Keypad buttons
+        keypadMatrixEl.innerHTML = '';
+        for (let i = 0; i <= 9; i++) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `btn-key ${i === currentDigit ? 'current' : ''}`;
+          btn.id = `btn-digit-${i}`;
+          btn.innerHTML = `
+            <span>${i}</span>
+            <span class="btn-key-hex">0x${DIGIT_CODES[i].code.toString(16).toUpperCase().padStart(2, '0')}</span>
+          `;
+          btn.addEventListener('click', () => {
+            stopAutoScan();
+            setStandardDigit(i);
+          });
+          keypadMatrixEl.appendChild(btn);
+        }
+
+        // 3. Build 8-bit register cells (MSB to LSB: 7 to 0)
+        bitsGridEl.innerHTML = '';
+        [7, 6, 5, 4, 3, 2, 1, 0].forEach(bitIdx => {
+          const ch = CHANNELS[bitIdx];
+          const cell = document.createElement('div');
+          cell.className = 'bit-slot';
+          cell.id = `bit-slot-${ch.seg}`;
+          cell.title = `点击切换 Q0.${bitIdx} (${ch.seg})`;
+          cell.innerHTML = `
+            <span class="bit-header">Q0.${bitIdx}(${ch.seg})</span>
+            <span class="bit-num" id="bit-val-${ch.seg}">0</span>
+          `;
+          cell.addEventListener('click', () => {
+            toggleBit(bitIdx);
+          });
+          bitsGridEl.appendChild(cell);
+        });
+
+        // 4. Build Truth Table
+        truthTableBodyEl.innerHTML = '';
+        for (let d = 0; d <= 9; d++) {
+          const item = DIGIT_CODES[d];
+          const tr = document.createElement('tr');
+          tr.id = `tr-digit-${d}`;
+          tr.setAttribute('data-num', d);
+
+          const bitsMap = {};
+          CHANNELS.forEach(c => {
+            bitsMap[c.seg] = item.activeSegs.includes(c.seg) ? 1 : 0;
+          });
+
+          tr.innerHTML = `
+            <td style="font-weight:900; font-size:14px; color:#38bdf8;">${d}</td>
+            <td class="bit-0" id="tr-dp-${d}">0</td>
+            <td class="${bitsMap.g ? 'bit-1' : 'bit-0'}">${bitsMap.g}</td>
+            <td class="${bitsMap.f ? 'bit-1' : 'bit-0'}">${bitsMap.f}</td>
+            <td class="${bitsMap.e ? 'bit-1' : 'bit-0'}">${bitsMap.e}</td>
+            <td class="${bitsMap.d ? 'bit-1' : 'bit-0'}">${bitsMap.d}</td>
+            <td class="${bitsMap.c ? 'bit-1' : 'bit-0'}">${bitsMap.c}</td>
+            <td class="${bitsMap.b ? 'bit-1' : 'bit-0'}">${bitsMap.b}</td>
+            <td class="${bitsMap.a ? 'bit-1' : 'bit-0'}">${bitsMap.a}</td>
+            <td style="color:#f59e0b; font-weight:700;">0x${item.code.toString(16).toUpperCase().padStart(2, '0')}</td>
+            <td style="color:#a78bfa;">${item.code}</td>
+            <td style="color:#94a3b8; font-size:11px;">${item.activeSegs.join(', ')}</td>
+          `;
+
+          tr.addEventListener('click', () => {
+            stopAutoScan();
+            setStandardDigit(d);
+          });
+          truthTableBodyEl.appendChild(tr);
+        }
+
+        // 5. Build Ladder Logic Bit monitor cards
+        ladderBitCardsEl.innerHTML = '';
+        CHANNELS.forEach(ch => {
+          const card = document.createElement('div');
+          card.id = `ladder-bit-card-${ch.seg}`;
+          card.style.cssText = 'background:#131824; border:1px solid #283344; border-radius:6px; padding:6px; text-align:center; transition:all 0.15s ease;';
+          card.innerHTML = `
+            <div style="font-size:10px; color:#94a3b8; font-family:monospace;">${ch.plc}</div>
+            <div style="font-size:12px; font-weight:bold; color:#f59e0b; margin:2px 0;">段 ${ch.seg}</div>
+            <div style="font-size:13px; font-family:monospace; font-weight:800; color:#475569;" id="ladder-bit-state-${ch.seg}">OFF</div>
+          `;
+          ladderBitCardsEl.appendChild(card);
+        });
+
+        // 6. Build Schematic SVGs
+        initSchematicSvg();
+      }
+
+      function initSchematicSvg() {
+        const plcTermsGroup = document.getElementById('schematicPlcTerminals');
+        const dispPinsGroup = document.getElementById('schematicDisplayPins');
+        const wiresGroup = document.getElementById('schematicWires');
+
+        plcTermsGroup.innerHTML = '';
+        dispPinsGroup.innerHTML = '';
+        wiresGroup.innerHTML = '';
+
+        const startY = 130;
+        const gapY = 24;
+
+        CHANNELS.forEach((ch, idx) => {
+          const y = startY + idx * gapY;
+
+          // PLC Terminal
+          const circlePlc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circlePlc.setAttribute('cx', '180');
+          circlePlc.setAttribute('cy', y);
+          circlePlc.setAttribute('r', '4.5');
+          circlePlc.setAttribute('fill', '#64748b');
+          circlePlc.setAttribute('id', `sch-plc-pt-${ch.seg}`);
+          plcTermsGroup.appendChild(circlePlc);
+
+          const txtPlc = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          txtPlc.setAttribute('x', '170');
+          txtPlc.setAttribute('y', y + 3.5);
+          txtPlc.setAttribute('fill', '#94a3b8');
+          txtPlc.setAttribute('font-size', '9.5');
+          txtPlc.setAttribute('font-family', 'monospace');
+          txtPlc.setAttribute('text-anchor', 'end');
+          txtPlc.textContent = ch.plc;
+          plcTermsGroup.appendChild(txtPlc);
+
+          // Display Pin
+          const circleDisp = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          circleDisp.setAttribute('cx', '540');
+          circleDisp.setAttribute('cy', y);
+          circleDisp.setAttribute('r', '4.5');
+          circleDisp.setAttribute('fill', '#64748b');
+          circleDisp.setAttribute('id', `sch-disp-pt-${ch.seg}`);
+          dispPinsGroup.appendChild(circleDisp);
+
+          const txtDisp = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          txtDisp.setAttribute('x', '552');
+          txtDisp.setAttribute('y', y + 3.5);
+          txtDisp.setAttribute('fill', '#f59e0b');
+          txtDisp.setAttribute('font-size', '9.5');
+          txtDisp.setAttribute('font-family', 'monospace');
+          txtDisp.setAttribute('text-anchor', 'start');
+          txtDisp.textContent = `Pin ${ch.seg.toUpperCase()} (限流 470Ω)`;
+          dispPinsGroup.appendChild(txtDisp);
+
+          // Wire Line
+          const wire = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          wire.setAttribute('x1', '180');
+          wire.setAttribute('y1', y);
+          wire.setAttribute('x2', '540');
+          wire.setAttribute('y2', y);
+          wire.setAttribute('stroke', '#242e3d');
+          wire.setAttribute('stroke-width', '2');
+          wire.setAttribute('id', `sch-wire-${ch.seg}`);
+          wiresGroup.appendChild(wire);
+        });
+      }
+
+      function renderState() {
+        const dpActive = Boolean(currentByte & 0x80);
+
+        // Check if current 7-segments match any standard 0-9 (ignoring DP)
+        const pureSegmentsByte = currentByte & 0x7F;
+        let matchedDigit = null;
+        for (let num = 0; num <= 9; num++) {
+          if (DIGIT_CODES[num].code === pureSegmentsByte) {
+            matchedDigit = num;
+            break;
+          }
+        }
+        currentDigit = matchedDigit;
+
+        // 1. Update 7-segment SVG display
+        CHANNELS.forEach(ch => {
+          const isBitOn = isPlcRunning && Boolean(currentByte & (1 << ch.bit));
+
+          // Segment SVG path
+          const polyEl = document.getElementById(`seg-${ch.seg}`);
+          if (polyEl) {
+            if (isBitOn) polyEl.classList.add('on');
+            else polyEl.classList.remove('on');
+          }
+
+          // Segment pill
+          const pill = document.querySelector(`.seg-pill[data-seg="${ch.seg}"]`);
+          if (pill) {
+            if (isBitOn) pill.classList.add('active');
+            else pill.classList.remove('active');
+          }
+
+          // PLC DO channel cell & lamp
+          const cellEl = document.getElementById(`ch-cell-${ch.seg}`);
+          const levelEl = document.getElementById(`level-${ch.seg}`);
+          if (cellEl && levelEl) {
+            if (isBitOn) {
+              cellEl.classList.add('active');
+              levelEl.textContent = '1 (24V)';
+            } else {
+              cellEl.classList.remove('active');
+              levelEl.textContent = '0 (0V)';
+            }
+          }
+
+          // Register bit cell
+          const bitSlotEl = document.getElementById(`bit-slot-${ch.seg}`);
+          const bitValEl = document.getElementById(`bit-val-${ch.seg}`);
+          if (bitSlotEl && bitValEl) {
+            if (isBitOn) {
+              bitSlotEl.classList.add('active');
+              bitValEl.textContent = '1';
+            } else {
+              bitSlotEl.classList.remove('active');
+              bitValEl.textContent = '0';
+            }
+          }
+
+          // Ladder Bit Card
+          const lCard = document.getElementById(`ladder-bit-card-${ch.seg}`);
+          const lState = document.getElementById(`ladder-bit-state-${ch.seg}`);
+          if (lCard && lState) {
+            if (isBitOn) {
+              lCard.style.borderColor = '#00ff73';
+              lCard.style.background = '#0a2316';
+              lState.style.color = '#00ff73';
+              lState.textContent = 'ON (1)';
+            } else {
+              lCard.style.borderColor = '#283344';
+              lCard.style.background = '#131824';
+              lState.style.color = '#475569';
+              lState.textContent = 'OFF (0)';
+            }
+          }
+
+          // Schematic Wire & Terminals
+          const schWire = document.getElementById(`sch-wire-${ch.seg}`);
+          const schPlcPt = document.getElementById(`sch-plc-pt-${ch.seg}`);
+          const schDispPt = document.getElementById(`sch-disp-pt-${ch.seg}`);
+          if (schWire && schPlcPt && schDispPt) {
+            if (isBitOn) {
+              schWire.setAttribute('stroke', '#00ff73');
+              schWire.setAttribute('stroke-width', '2.5');
+              schWire.style.filter = 'drop-shadow(0 0 4px #00ff73)';
+              schPlcPt.setAttribute('fill', '#00ff73');
+              schDispPt.setAttribute('fill', '#00ff73');
+            } else {
+              schWire.setAttribute('stroke', '#242e3d');
+              schWire.setAttribute('stroke-width', '2');
+              schWire.style.filter = 'none';
+              schPlcPt.setAttribute('fill', '#64748b');
+              schDispPt.setAttribute('fill', '#64748b');
+            }
+          }
+        });
+
+        // 2. Keypad buttons active highlight
+        for (let i = 0; i <= 9; i++) {
+          const btn = document.getElementById(`btn-digit-${i}`);
+          if (btn) {
+            if (i === currentDigit) {
+              btn.classList.add('current');
+            } else {
+              btn.classList.remove('current');
+            }
+          }
+        }
+
+        // 3. DP Button state
+        if (dpActive) {
+          btnToggleDpEl.classList.add('active');
+        } else {
+          btnToggleDpEl.classList.remove('active');
+        }
+
+        // 4. Inputs synchronization
+        if (document.activeElement !== directNumInputEl) {
+          directNumInputEl.value = (currentDigit !== null) ? currentDigit : '';
+        }
+        if (document.activeElement !== directHexInputEl) {
+          directHexInputEl.value = '0x' + currentByte.toString(16).toUpperCase().padStart(2, '0');
+        }
+
+        // 5. Telemetry Stats
+        statDecodedDigitEl.textContent = (currentDigit !== null) 
+          ? (dpActive ? `${currentDigit}.` : currentDigit) 
+          : (dpActive ? 'CUSTOM.' : 'CUSTOM');
+        
+        const hexStr = '16#' + currentByte.toString(16).toUpperCase().padStart(2, '0');
+        statHexEl.textContent = hexStr;
+        statDecEl.textContent = currentByte.toString(10);
+        statBinStringEl.textContent = '2#' + currentByte.toString(2).padStart(8, '0');
+
+        // Ladder Variables
+        ladderInputVarEl.textContent = (currentDigit !== null) ? `VB10 (${currentDigit})` : 'VB10 (自定义)';
+        ladderOutputVarEl.textContent = `QB0 (0x${currentByte.toString(16).toUpperCase().padStart(2, '0')})`;
+
+        // 6. Truth Table active row
+        for (let num = 0; num <= 9; num++) {
+          const tr = document.getElementById(`tr-digit-${num}`);
+          const trDp = document.getElementById(`tr-dp-${num}`);
+          if (tr) {
+            if (num === currentDigit) {
+              tr.classList.add('active-row');
+            } else {
+              tr.classList.remove('active-row');
+            }
+          }
+          if (trDp) {
+            if (num === currentDigit && dpActive) {
+              trDp.textContent = '1';
+              trDp.className = 'bit-1';
+            } else {
+              trDp.textContent = '0';
+              trDp.className = 'bit-0';
+            }
+          }
+        }
+
+        // Simulate micro PLC cycle jitter
+        const jitter = (1.0 + Math.random() * 0.4).toFixed(1);
+        scanSpeedValEl.textContent = `${jitter}ms`;
+      }
+
+      function setByteValue(newByte, playSound = true) {
+        currentByte = newByte & 0xFF;
+        if (playSound) playRelaySound();
+        renderState();
+      }
+
+      function setStandardDigit(num) {
+        if (num < 0 || num > 9) return;
+        const dpOn = Boolean(currentByte & 0x80);
+        let newByte = DIGIT_CODES[num].code;
+        if (dpOn) newByte |= 0x80;
+        setByteValue(newByte);
+      }
+
+      function toggleBit(bitIndex) {
+        stopAutoScan();
+        const mask = 1 << bitIndex;
+        const newByte = currentByte ^ mask;
+        setByteValue(newByte);
+      }
+
+      function toggleDp() {
+        toggleBit(7);
+      }
+
+      function allOn() {
+        stopAutoScan();
+        setByteValue(0xFF);
+        showToast('已激活全亮测试: 0xFF');
+      }
+
+      function allOff() {
+        stopAutoScan();
+        setByteValue(0x00);
+        showToast('已清空所有输出: 0x00');
+      }
+
+      function invertBits() {
+        stopAutoScan();
+        setByteValue((~currentByte) & 0xFF);
+        showToast('已反转段码输出');
+      }
+
+      function startAutoScan() {
+        if (autoScanTimer) return;
+        btnAutoScanToggleEl.classList.add('active');
+        scanPlayIconEl.textContent = '⏸';
+        scanPlayTextEl.textContent = '停止巡检';
+
+        const interval = parseInt(scanSpeedSelectEl.value, 10) || 1000;
+        autoScanTimer = setInterval(() => {
+          let next = (currentDigit !== null) ? currentDigit + autoScanDirection : 0;
+          if (next > 9) next = 0;
+          if (next < 0) next = 9;
+          setStandardDigit(next);
+        }, interval);
+        showToast(`自动巡检已启动 (${interval}ms)`);
+      }
+
+      function stopAutoScan() {
+        if (!autoScanTimer) return;
+        clearInterval(autoScanTimer);
+        autoScanTimer = null;
+        btnAutoScanToggleEl.classList.remove('active');
+        scanPlayIconEl.textContent = '▶';
+        scanPlayTextEl.textContent = '启动自动巡检';
+      }
+
+      function toggleAutoScan() {
+        if (autoScanTimer) {
+          stopAutoScan();
+          showToast('自动巡检已停止');
+        } else {
+          startAutoScan();
+        }
+      }
+
+      // Tab switcher
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabViews = document.querySelectorAll('.tab-view');
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const targetTabId = btn.getAttribute('data-tab');
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabViews.forEach(v => v.classList.remove('active'));
+          btn.classList.add('active');
+          const targetView = document.getElementById(targetTabId);
+          if (targetView) targetView.classList.add('active');
+        });
+      });
+
+      // Quick function buttons
+      btnToggleDpEl.addEventListener('click', toggleDp);
+      btnAllOnEl.addEventListener('click', allOn);
+      btnAllOffEl.addEventListener('click', allOff);
+      btnInvertEl.addEventListener('click', invertBits);
+
+      // Manual Inputs
+      directNumInputEl.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        if (!isNaN(val) && val >= 0 && val <= 9) {
+          stopAutoScan();
+          setStandardDigit(val);
+        }
+      });
+
+      directHexInputEl.addEventListener('change', (e) => {
+        let text = e.target.value.trim().toLowerCase();
+        if (text.startsWith('0x') || text.startsWith('16#')) {
+          text = text.replace('0x', '').replace('16#', '');
+        }
+        const parsed = parseInt(text, 16);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 255) {
+          stopAutoScan();
+          setByteValue(parsed);
+          showToast(`已载入 HEX: 0x${parsed.toString(16).toUpperCase()}`);
+        } else {
+          directHexInputEl.value = '0x' + currentByte.toString(16).toUpperCase().padStart(2, '0');
+          showToast('输入的十六进制值无效 (0x00 ~ 0xFF)');
+        }
+      });
+
+      // Auto Scan controls
+      btnAutoScanToggleEl.addEventListener('click', toggleAutoScan);
+      scanSpeedSelectEl.addEventListener('change', () => {
+        if (autoScanTimer) {
+          stopAutoScan();
+          startAutoScan();
+        }
+      });
+
+      btnScanDirectionEl.addEventListener('click', () => {
+        autoScanDirection = -autoScanDirection;
+        if (autoScanDirection === 1) {
+          dirIconEl.textContent = '⬆';
+          dirTextEl.textContent = '递增巡检';
+        } else {
+          dirIconEl.textContent = '⬇';
+          dirTextEl.textContent = '递减巡检';
+        }
+        showToast(`已切换为: ${dirTextEl.textContent}`);
+      });
+
+      // Segment click interaction (both SVG polygons and tags)
+      CHANNELS.forEach(ch => {
+        const poly = document.getElementById(`seg-${ch.seg}`);
+        if (poly) {
+          poly.addEventListener('click', () => {
+            toggleBit(ch.bit);
+          });
+        }
+        const pill = document.querySelector(`.seg-pill[data-seg="${ch.seg}"]`);
+        if (pill) {
+          pill.addEventListener('click', () => {
+            toggleBit(ch.bit);
+          });
+        }
+      });
+
+      // Audio Toggle
+      btnAudioToggleEl.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        if (soundEnabled) {
+          btnAudioToggleEl.classList.add('active');
+          audioIconEl.textContent = '🔊';
+          audioLabelEl.textContent = '音效开';
+          playRelaySound();
+          showToast('继电器触点音效已启用');
+        } else {
+          btnAudioToggleEl.classList.remove('active');
+          audioIconEl.textContent = '🔇';
+          audioLabelEl.textContent = '已静音';
+          showToast('已关闭动作音效');
+        }
+      });
+
+      // RUN/STOP Mode
+      btnPlcRunStopEl.addEventListener('click', () => {
+        isPlcRunning = !isPlcRunning;
+        if (isPlcRunning) {
+          plcStatePipEl.className = 'indicator-pip run';
+          plcStateLabelEl.textContent = 'RUN';
+          runStopIconEl.textContent = '⏸';
+          runStopLabelEl.textContent = '运行中';
+          btnPlcRunStopEl.classList.remove('active');
+          showToast('PLC 已切换至 RUN 运行模式');
+        } else {
+          stopAutoScan();
+          plcStatePipEl.className = 'indicator-pip stop';
+          plcStateLabelEl.textContent = 'STOP';
+          runStopIconEl.textContent = '▶';
+          runStopLabelEl.textContent = '已停止';
+          btnPlcRunStopEl.classList.add('active');
+          showToast('PLC 已切换至 STOP 停机模式 (DO 全部关闭)');
+        }
+        renderState();
+      });
+
+      // Keyboard shortcuts
+      window.addEventListener('keydown', (e) => {
+        if (document.activeElement === directNumInputEl || document.activeElement === directHexInputEl) {
+          return;
+        }
+
+        if (e.key >= '0' && e.key <= '9') {
+          const num = parseInt(e.key, 10);
+          stopAutoScan();
+          setStandardDigit(num);
+
+          // Visual tactile bounce
+          const keyBtn = document.getElementById(`btn-digit-${num}`);
+          if (keyBtn) {
+            keyBtn.classList.add('pressed');
+            setTimeout(() => keyBtn.classList.remove('pressed'), 120);
+          }
+        } else if (e.code === 'Space') {
+          e.preventDefault();
+          toggleDp();
+        } else if (e.key === 'a' || e.key === 'A') {
+          toggleAutoScan();
+        } else if (e.key === 'm' || e.key === 'M') {
+          btnAudioToggleEl.click();
+        }
+      });
+
+      // Initialize
+      initLayouts();
+      renderState();
+
+    })();
+  </script>
+</body>
+</html>
